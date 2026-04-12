@@ -7,10 +7,6 @@ REST API for building energy simulation using the [Bemify](https://bemify.no) ca
 ## Quick Start
 
 ```bash
-pip install requests
-```
-
-```bash
 # Run a simulation with server-side climate data
 curl -X POST https://api.bemify.no/simulate \
   -H "Authorization: Bearer bmf_YOUR_TOKEN" \
