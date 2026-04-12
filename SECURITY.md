@@ -9,7 +9,7 @@ the Bemify Simulation API (`api.bemify.no`) is built and operated.
 If you believe you have found a security vulnerability in the Bemify Simulation
 API or any related code in this repository, please report it privately.
 
-**Email:** security@bemify.no (fallback: erlend@bemify.no)
+**Email:** erlend@bemify.no
 
 Please include:
 
