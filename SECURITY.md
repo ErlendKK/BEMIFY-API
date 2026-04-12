@@ -371,35 +371,3 @@ program at this stage.
 | Simulation logs (filenames, durations, status) | SQLite                      | Indefinite at present — _decide retention policy_ | Legitimate interest (Art. 6(1)(f)) |
 | Uploaded SXI/EPW files                         | RAM only, during processing | Discarded after job completes                     | Contract                           |
 | Simulation results                             | RAM                         | 30 minutes after completion                       | Contract                           |
-
-**Data subjects:** API key owners (typically business contacts at customer
-companies). No end-user personal data is processed.
-
-**Subprocessors:** None. Climate data is fetched from Bemify-controlled sources.
-
-**Data residency:** Contabo VPS, EU (verify region).
-
-**Open question:** Define a retention policy for `simulation_logs`. Suggest
-12–24 months for usage analytics, then aggregate-and-delete.
-
----
-
-## 9. Recommended next steps (prioritized)
-
-1. **Schedule `npm audit` and SQLite backup** — low effort, meaningful resilience
-   improvement.
-2. **LRU/TTL on climate cache** — bounds memory growth.
-3. **Define and document log retention policy** — closes the GDPR open question.
-4. **Add audit log for key lifecycle** — improves accountability.
-5. **Magic-byte validation on uploads** — defense in depth.
-
----
-
-## 10. Review schedule
-
-This document should be reviewed:
-
-- Quarterly, by the maintainer
-- Whenever a new endpoint or authentication mechanism is added
-- After any security incident
-- Before signing contracts that reference security posture
