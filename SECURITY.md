@@ -46,7 +46,9 @@ The following security measures are in place:
 ### Transport security
 
 - All traffic is encrypted via TLS (HTTPS enforced, HTTP redirected)
-- Modern TLS configuration (TLS 1.2+)
+- TLS 1.2+ with forward secrecy (ECDHE key exchange)
+- Automatic certificate management via Let's Encrypt
+- OCSP stapling enabled by default
 
 ### Authentication
 
@@ -68,6 +70,12 @@ The following security measures are in place:
 - File size limits enforced
 - Upload count limits per request
 - Simulation type restricted to an allowlist of valid values
+- sxi files are parsed with [fast-xml-parser](https://github.com/NaturalIntelligence/fast-xml-parser),
+  a pure JavaScript XML parser that never fetches external resources (no file://, http://,
+  or external DTD loading), eliminating classic XXE file-disclosure and SSRF vectors.
+  Internal entity expansion is bounded by the parser's built-in limits to prevent
+  billion-laughs style DoS.
+- The import pipeline only extracts a fixed set of known fields from the parsed XML; unrecognized elements (including any file path references) are silently discarded. No filesystem access is performed based on uploaded file contents.
 - All SQL queries use parameterized statements
 
 ### HTTP security
@@ -87,6 +95,15 @@ The following security measures are in place:
 - Uploaded files are held in memory only and never written to disk
 - Simulation results are held in memory with a short time-to-live and automatically deleted
 - No end-user personal data is processed -- only building energy model data
+
+### Monitoring
+
+- All HTTP requests are logged with IP address, method, path, status code, and user agent
+- Failed authentication attempts and rate limit violations are logged with IP and timestamp
+- Request bodies and Authorization headers are never logged
+- Availability monitoring via UptimeRobot with alerts on downtime
+- Security logs are retained for 30 days, then automatically purged (aligned with data minimization principles)
+- Anomalies are reviewed manually via CLI tooling; UptimeRobot alerts on downtime
 
 ## Supported Versions
 
