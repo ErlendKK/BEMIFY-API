@@ -39,7 +39,7 @@ Start a new simulation. Returns a job ID for polling.
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `model` | file | Yes | SIMIEN Pro project file (.sxi) |
-| `climate` | file | No | EnergyPlus weather file (.epw). Not allowed with `tek17`. |
+| `climate` | file | No | EnergyPlus weather file (.epw). Not allowed with `energimerke` or `tek17`. |
 | `klimasted` | string | No | Municipality name (e.g. `Oslo`, `Bergen`). Alternative to `climate`. Not allowed with `tek17`. |
 | `simuleringstype` | string | No | `aarssimulering` (default), `energimerke`, or `tek17` |
 
