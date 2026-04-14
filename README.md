@@ -332,7 +332,7 @@ else:
     print(f"Error: {status['error']}")
 ```
 
-See [examples/test_api.py](examples/test_api.py) for a more complete example script.
+See [scripts/test_api.py](examples/test_api.py) for a more complete example script.
 
 ## Limits
 
