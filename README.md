@@ -46,6 +46,7 @@ Start a new simulation. Returns a job ID for polling.
 **Climate data rules:**
 - Provide either `klimasted` or `climate` file, not both
 - For `tek17`: climate data is always the TEK17 reference climate. Do **not** provide `klimasted` or `climate` — the request will be rejected with 400
+- For `energimerke`: only `klimasted` is accepted — EPW files are rejected with 400. Energy labeling requires a standard Norwegian climate location for the climate correction factor
 - Use `GET /klimasteder` to list valid municipality names
 
 **Per-key limits:**
@@ -68,6 +69,18 @@ Check job status and retrieve results. Requires authentication.
 
 **Statuses:** `queued` | `running` | `completed` | `error`
 
+**Response when queued (200):**
+```json
+{
+  "jobId": "job_1712832645123_1",
+  "status": "queued",
+  "queuedAt": "2026-04-11T10:30:45.123Z",
+  "queueLength": 3
+}
+```
+
+`queueLength` is the current queue depth (only included for `queued` status).
+
 **Response when completed (200):**
 ```json
 {
@@ -78,7 +91,7 @@ Check job status and retrieve results. Requires authentication.
   "completedAt": "2026-04-11T10:32:15.789Z",
   "result": {
     "beregningspunkter": { "netto": { ... }, "brutto": { ... }, "tilfort": { ... }, "levert": { ... } },
-    "zones": [ { "id": "sone-1", "name": "Sone 1", "area": 150.0 } ],
+    "zones": [ { "id": "sone-1", "navn": "Sone 1", "area": 150.0 } ],
     "energimerke": { ... },
     "tek17": { ... }
   }
@@ -137,7 +150,7 @@ Queue status. No authentication required.
 | Value | Description | Climate | Extra result fields |
 |-------|-------------|---------|---------------------|
 | `aarssimulering` | Full year simulation (default) | klimasted or EPW | `energimerke` |
-| `energimerke` | Energy labeling | klimasted or EPW | `energimerke` |
+| `energimerke` | Energy labeling | klimasted only | `energimerke` |
 | `tek17` | TEK17 compliance check | Automatic (reference, no input allowed) | `energimerke`, `tek17` |
 
 ## Result Format
@@ -332,7 +345,7 @@ else:
     print(f"Error: {status['error']}")
 ```
 
-See [scripts/test_api.py](examples/test_api.py) for a more complete example script.
+See [scripts/test_api.py](scripts/test_api.py) for a more complete example script.
 
 ## Limits
 
