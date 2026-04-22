@@ -1,3 +1,15 @@
+"""
+Bemify Simulation API - Test Script Base
+
+Prints results including energimerke and TEK17 validation.
+
+Usage:
+    python test_api_api.py
+
+Requirements:
+    pip install requests
+"""
+
 import requests
 import time
 
