@@ -102,8 +102,10 @@ The following security measures are in place:
 - Failed authentication attempts and rate limit violations are logged with IP, endpoint, and timestamp
 - Request bodies and Authorization headers are never logged
 - Security logs are retained for 30 days, then automatically purged (aligned with data minimization principles)
-- Security events and uptime is monitored via an authenticated admin dashboard (`/admin/security`), gated by Supabase JWT. The dashboard groups events per IP with heuristic classification (noise / normal / suspicious) to surface anomalies. CLI tooling (`manage-keys.ts logs`) remains available for deeper forensics.
+- Availability monitoring via UptimeRobot with alerts on downtime
+- Security events are reviewed via an authenticated admin dashboard (`/admin/security`), gated by Supabase JWT and a hard-coded admin user allowlist. The dashboard groups events per IP with heuristic classification (noise / normal / suspicious) to surface anomalies. CLI tooling (`manage-keys.ts logs`) remains available for deeper forensics.
 - Application-level exceptions are captured via PostHog and surfaced in the same admin dashboard (`/admin/errors`)
+
 
 ## Supported Versions
 
