@@ -18,7 +18,7 @@ curl https://api.bemify.no/job/job_123456_1 \
   -H "Authorization: Bearer bmf_YOUR_TOKEN"
 ```
 
-> **Note (Windows):** Use `curl.exe --ssl-no-revoke` — the Windows build of curl performs a TLS certificate revocation check that fails against Let's Encrypt certificates.
+> **Note (Windows):** Use `curl.exe --ssl-no-revoke`. The Windows build of curl performs a TLS certificate revocation check that fails against Let's Encrypt certificates.
 
 ## Authentication
 
@@ -47,7 +47,7 @@ Start a new simulation. Returns a job ID for polling.
 
 **Climate data rules:**
 - Provide either `klimasted` or `climate` file, not both
-- For `tek17`: climate data is always the TEK17 reference climate. Do **not** provide `klimasted` or `climate` — the request will be rejected with 400
+- For `tek17`: climate data is always the TEK17 reference climate. Do **not** provide `klimasted` or `climate`; the request will be rejected with 400
 - For `energimerke`: only `klimasted` is accepted — EPW files are rejected with 400. Energy labeling requires a standard Norwegian climate location for the climate correction factor
 - Use `GET /klimasteder` to list valid municipality names
 
@@ -106,7 +106,7 @@ to a full simulation.
 }
 ```
 
-`isValid: false` means the file could be parsed but contains structural errors —
+`isValid: false` means the file could be parsed but contains structural errors,
 the response is still `200`. HTTP `400` is only returned when the file cannot be
 parsed at all (malformed XML, missing `.sxi`-file, etc.).
 
@@ -129,7 +129,7 @@ Check job status and retrieve results. Requires authentication.
 `queueLength` is the current queue depth (only included for `queued` status).
 
 **Response when completed (200):**
-```json
+```jsonc
 {
   "jobId": "job_1712832645123_1",
   "status": "completed",
@@ -138,18 +138,22 @@ Check job status and retrieve results. Requires authentication.
   "completedAt": "2026-04-11T10:32:15.789Z",
   "result": {
     "beregningspunkter": {
-      "netto":  { "energyResults": { }, "energyTotal": 0, "powerDemand": { }, ... },
-      "brutto": { "energyResults": { }, ... },
-      "tilfort": { "tilfortEnergi": { }, ... },
-      "levert": { "levertEnergi": { }, "klimafordeling": { }, ... },
-      "nzebLevert": { "levertEnergi": { }, ... }
+      "netto":      { "energyResults": {}, "energyTotal": 0, "powerDemand": {}, /* ... */ },
+      "brutto":     { "energyResults": {}, /* ... */ },
+      "tilfort":    { "tilfortEnergi": {}, /* ... */ },
+      "levert":     { "levertEnergi": {}, "klimafordeling": {}, /* ... */ },
+      "nzebLevert": { "levertEnergi": {}, /* ... */ }
     },
-    "zones": [ { "id": "sone-1", "navn": "Sone 1", "area": 150.0 } ],
-    "energimerke": { ... },
-    "tek17": { ... }
+    "zones": [
+      { "id": "sone-1", "navn": "Sone 1", "area": 150.0 }
+      // ... en per sone
+    ],
+    "energimerke": { /* se egen seksjon */ },
+    "tek17": { /* se egen seksjon */ }
   }
 }
 ```
+
 
 **Response when error (200):**
 ```json
@@ -248,12 +252,13 @@ Computed automatically when the project has a valid municipality and building ca
 
 Only present when `simuleringstype=tek17`.
 
-```json
+```jsonc
 {
   "erSamsvarsende": true,
   "energiramme": {
     "poster": [
       { "post": "1a", "beskrivelse": "Romoppvarming", "spesifikk_kWhm2": 12.3 }
+      // ... en post per energipost
     ],
     "totalBeregnet": 105.2,
     "forskriftskrav": 115.0,
@@ -263,12 +268,14 @@ Only present when `simuleringstype=tek17`.
   "minstekrav": {
     "rader": [
       { "bygningsdel": "U-verdi yttervegger", "faktiskVerdi": 0.18, "kravVerdi": 0.22, "status": "oppfylt" }
+      // ... en rad per bygningsdel
     ],
     "samletStatus": "oppfylt"
   },
   "luftmengder": {
     "rader": [
       { "beskrivelse": "Spesifikk vifteeffekt (SFP)", "faktiskVerdi": 1.50, "kravVerdi": 2.00, "status": "oppfylt" }
+      // ... en rad per krav
     ],
     "samletStatus": "oppfylt"
   },
@@ -288,12 +295,13 @@ Only present when `simuleringstype=tek17`.
 }
 ```
 
+
 Possible `status` values: `"oppfylt"`, `"ikke_oppfylt"`, `"ikke_relevant"`.
 
 ### Calculation Points (`result.beregningspunkter`)
 
 Results are grouped into calculation points per NS 3031. **Important:** the points do
-*not* share a common shape — the field holding the annual per-category totals is named
+*not* share a common shape. The field holding the annual per-category totals is named
 differently in each point. Read the correct field per point:
 
 | Point | Key | Description | Annual totals field |
@@ -315,18 +323,49 @@ Full field list per point:
 
 ```jsonc
 {
-  "netto":  { "energyResults": { "1a Romoppvarming": 12345, ... }, "energyTotal": 0,
-              "powerDemand": { }, "peakTimestamps": { }, "totalPeakPower": { } },
-  "brutto": { /* same shape as netto */ },
-  "tilfort": { "tilfortEnergi": { }, "tilfortEnergiTotal": 0,
-               "levertEffekt": { }, "levertEffektTimestamps": { }, "levertEffektTotal": { } },
-  "levert": { "levertEnergi": { "1 Levert elektrisitet": 59989, ... }, "total": 0,
-              "elektriskBudsjett": { }, "klimafordeling": { "klimaavhengig": { }, "ikkeKlimaavhengig": { } },
-              "oppvarmingOutput_kWh": { }, "kjoelingOutput_kWh": { }, "apentIldstedBio_kWh": 0,
-              "monthlyLevertPerKilde": { }, "monthlyMakseffektPerKilde": { } },
-  "nzebLevert": { /* same shape as levert */ }
+  // A: netto, B: brutto -- keyed by energy post
+  "netto": {
+    "energyResults": { "1a Romoppvarming": 12345, "2 Varmtvann": 6789 },
+    "energyTotal": 0,
+    "powerDemand": {},
+    "peakTimestamps": {},
+    "totalPeakPower": {}
+  },
+  "brutto": {
+    // samme form som "netto"
+  },
+
+  // C: tilfort -- keyed by energy post
+  "tilfort": {
+    "tilfortEnergi": {},
+    "tilfortEnergiTotal": 0,
+    "levertEffekt": {},
+    "levertEffektTimestamps": {},
+    "levertEffektTotal": {}
+  },
+
+  // D: levert -- keyed by energy carrier
+  "levert": {
+    "levertEnergi": { "1 Levert elektrisitet": 59989 },
+    "total": 0,
+    "elektriskBudsjett": {},
+    "klimafordeling": {
+      "klimaavhengig": {},
+      "ikkeKlimaavhengig": {}
+    },
+    "oppvarmingOutput_kWh": {},
+    "kjoelingOutput_kWh": {},
+    "apentIldstedBio_kWh": 0,
+    "monthlyLevertPerKilde": {},
+    "monthlyMakseffektPerKilde": {}
+  },
+
+  "nzebLevert": {
+    // samme form som "levert"
+  }
 }
 ```
+
 
 ### Additional result fields
 
