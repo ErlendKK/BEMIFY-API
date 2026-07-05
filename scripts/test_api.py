@@ -202,7 +202,7 @@ def print_results(result):
         total_area = sum(z.get("area", 0) for z in zones)
         ok(f"{len(zones)} zone(s), total area: {total_area:.1f} m2")
         for z in zones:
-            info(f"  - {z.get('name', z.get('id', '?'))}: {z.get('area', 0):.1f} m2")
+            info(f"  - {z.get('navn', z.get('id', '?'))}: {z.get('area', 0):.1f} m2")
 
     # Beregningspunkter
     bp = result.get("beregningspunkter", {})
