@@ -18,6 +18,8 @@ curl https://api.bemify.no/job/job_123456_1 \
   -H "Authorization: Bearer bmf_YOUR_TOKEN"
 ```
 
+> **Note (Windows):** Use `curl.exe --ssl-no-revoke` — the Windows build of curl performs a TLS certificate revocation check that fails against Let's Encrypt certificates.
+
 ## Authentication
 
 All simulation endpoints require a Bearer token in the `Authorization` header:
@@ -63,6 +65,51 @@ Start a new simulation. Returns a job ID for polling.
 }
 ```
 
+### POST /validate
+
+Validate an SXI file without running the simulation. Returns a structured list of
+errors, warnings, and missing fields detected during parsing and conversion to the
+Bemify intermediate format. Useful for iterating on model files before committing
+to a full simulation.
+
+**Content-Type:** `multipart/form-data`
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `model` | file | Yes | SIMIEN Pro project file (.sxi) |
+
+**Per-key limits:**
+- `POST /validate`: max 20 requests per minute per API key
+
+**Response (200):**
+```json
+{
+  "isValid": true,
+  "errors": [],
+  "warnings": [
+    {
+      "nodeId": "zone-1",
+      "field": "setpoint",
+      "message": "Default value used",
+      "defaultValue": 21
+    }
+  ],
+  "missingData": [
+    {
+      "nodeId": "zone-1",
+      "nodeType": "Sone",
+      "missingFields": [
+        { "field": "buildingSimulationProperties", "defaultValue": null }
+      ]
+    }
+  ]
+}
+```
+
+`isValid: false` means the file could be parsed but contains structural errors —
+the response is still `200`. HTTP `400` is only returned when the file cannot be
+parsed at all (malformed XML, missing `.sxi`-file, etc.).
+
 ### GET /job/:jobId
 
 Check job status and retrieve results. Requires authentication.
@@ -90,7 +137,13 @@ Check job status and retrieve results. Requires authentication.
   "startedAt": "2026-04-11T10:30:50.456Z",
   "completedAt": "2026-04-11T10:32:15.789Z",
   "result": {
-    "beregningspunkter": { "netto": { ... }, "brutto": { ... }, "tilfort": { ... }, "levert": { ... } },
+    "beregningspunkter": {
+      "netto":  { "energyResults": { }, "energyTotal": 0, "powerDemand": { }, ... },
+      "brutto": { "energyResults": { }, ... },
+      "tilfort": { "tilfortEnergi": { }, ... },
+      "levert": { "levertEnergi": { }, "klimafordeling": { }, ... },
+      "nzebLevert": { "levertEnergi": { }, ... }
+    },
     "zones": [ { "id": "sone-1", "navn": "Sone 1", "area": 150.0 } ],
     "energimerke": { ... },
     "tek17": { ... }
@@ -239,16 +292,64 @@ Possible `status` values: `"oppfylt"`, `"ikke_oppfylt"`, `"ikke_relevant"`.
 
 ### Calculation Points (`result.beregningspunkter`)
 
-Results are grouped into four calculation points per NS 3031:
+Results are grouped into calculation points per NS 3031. **Important:** the points do
+*not* share a common shape — the field holding the annual per-category totals is named
+differently in each point. Read the correct field per point:
 
-| Point | Key | Description |
-|-------|-----|-------------|
-| A | `netto` | Net energy demand (building needs) |
-| B | `brutto` | Gross energy demand (including system losses) |
-| C | `tilfort` | Supplied energy (from energy sources) |
-| D | `levert` | Delivered energy (from grid/carriers) |
+| Point | Key | Description | Annual totals field |
+|-------|-----|-------------|---------------------|
+| A | `netto` | Net energy demand (building needs) | `energyResults` |
+| B | `brutto` | Gross energy demand (including system losses) | `energyResults` |
+| C | `tilfort` | Supplied energy (from energy sources) | `tilfortEnergi` |
+| D | `levert` | Delivered energy (per energy carrier) | `levertEnergi` |
+| D (nZEB) | `nzebLevert` | Delivered energy, nZEB variant (excludes certain posts, no export credit) | `levertEnergi` |
 
-Each contains `energyResults` with annual totals per energy post (space heating, ventilation heating, hot water, cooling, lighting, etc.).
+`energyResults` and `tilfortEnergi` are keyed by energy post (`"1a Romoppvarming"`,
+`"1b Ventilasjonsvarme"`, `"2 Varmtvann"`, `"3a Romkjøling"`, `"3b Ventilasjonskjøling"`,
+`"5 Belysning"`, ...) in kWh/year.
+
+`levertEnergi` (points D) is keyed by energy carrier (`"1 Levert elektrisitet"`,
+`"3 Levert fjernvarme"`, `"4 Levert fjernkjøling"`, ...) in kWh/year.
+
+Full field list per point:
+
+```jsonc
+{
+  "netto":  { "energyResults": { "1a Romoppvarming": 12345, ... }, "energyTotal": 0,
+              "powerDemand": { }, "peakTimestamps": { }, "totalPeakPower": { } },
+  "brutto": { /* same shape as netto */ },
+  "tilfort": { "tilfortEnergi": { }, "tilfortEnergiTotal": 0,
+               "levertEffekt": { }, "levertEffektTimestamps": { }, "levertEffektTotal": { } },
+  "levert": { "levertEnergi": { "1 Levert elektrisitet": 59989, ... }, "total": 0,
+              "elektriskBudsjett": { }, "klimafordeling": { "klimaavhengig": { }, "ikkeKlimaavhengig": { } },
+              "oppvarmingOutput_kWh": { }, "kjoelingOutput_kWh": { }, "apentIldstedBio_kWh": 0,
+              "monthlyLevertPerKilde": { }, "monthlyMakseffektPerKilde": { } },
+  "nzebLevert": { /* same shape as levert */ }
+}
+```
+
+### Additional result fields
+
+Beyond `beregningspunkter`, `zones`, `energimerke` and `tek17`, the `result` object also
+contains the following top-level fields (mainly for detailed analysis; most integrations
+only need the four above):
+
+| Field | Description |
+|-------|-------------|
+| `outputMode` | Always `"aggregated"` for API results |
+| `sentralAndelSone` | Central supply share of heat demand per zone [kWh] |
+| `distribusjonsOgAkkumuleringstap` | Annual distribution + accumulation losses [kWh] |
+| `energyPerPostPerZone` | Annual energy per post, per zone [kWh] |
+| `monthlyEnergyPerPostPerZone` | Monthly energy per post, per zone [kWh] |
+| `monthlyThermalPerZone` | Monthly heating/cooling per zone [kWh] |
+| `monthlyTemperaturesPerZone` | Monthly min/avg/max temperatures per zone |
+| `quarterlyEffektPerZone` / `quarterlyTemperaturPerZone` | 15-min power / temperature time series per zone |
+| `ventilasjonStatsPerZone` | Ventilation stats per zone |
+| `varmetapstallPerSone` | Heat loss coefficients per zone |
+| `solcelleProduction` / `vindturbinProduction` | PV / wind production |
+| `kildeSPF` / `kildeOutput` | SPF and thermal output per central energy source |
+| `warnings` | Simulation warnings |
+| `metadata` | `{ simulationTime, totalSteps, stepDuration, totalHours }` |
 
 ## Error Codes
 
@@ -266,6 +367,8 @@ Each contains `energyResults` with annual totals per energy post (space heating,
 ## Examples
 
 ### curl
+
+On Windows, add `--ssl-no-revoke` to all `curl.exe` commands (see note under Quick Start).
 
 ```bash
 # Standard simulation with municipality climate data
@@ -292,6 +395,11 @@ curl -X POST https://api.bemify.no/simulate \
   -H "Authorization: Bearer bmf_YOUR_TOKEN" \
   -F "model=@building.sxi" \
   -F "climate=@oslo.epw"
+
+# Validate an SXI file without running a simulation
+curl -X POST https://api.bemify.no/validate \
+  -H "Authorization: Bearer bmf_YOUR_TOKEN" \
+  -F "model=@building.sxi"
 
 # Poll for results
 curl https://api.bemify.no/job/job_123456_1 \
@@ -353,6 +461,7 @@ See [scripts/test_api.py](scripts/test_api.py) for a more complete example scrip
 |-------|-------|
 | Rate limit | 30 requests per minute |
 | Per-key `POST /simulate` | 6 requests per minute |
+| Per-key `POST /validate` | 20 requests per minute |
 | Per-key `GET /job/:jobId` | 120 requests per minute |
 | Max active jobs per API key | 3 |
 | Max file size | 10 MB per file |
