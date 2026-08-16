@@ -44,12 +44,20 @@ Start a new simulation. Returns a job ID for polling.
 | `climate` | file | No | EnergyPlus weather file (.epw). Not allowed with `energimerke` or `tek17`. |
 | `klimasted` | string | No | Municipality name (e.g. `Oslo`, `Bergen`). Alternative to `climate`. Not allowed with `tek17`. |
 | `simuleringstype` | string | No | `aarssimulering` (default), `energimerke`, or `tek17` |
+| `modellversjon` | string | No | Calculation model version (e.g. `2.1`). Defaults to the newest version. Use `GET /modellversjoner` to list valid values. |
 
 **Climate data rules:**
 - Provide either `klimasted` or `climate` file, not both
 - For `tek17`: climate data is always the TEK17 reference climate. Do **not** provide `klimasted` or `climate`; the request will be rejected with 400
-- For `energimerke`: only `klimasted` is accepted — EPW files are rejected with 400. Energy labeling requires a standard Norwegian climate location for the climate correction factor
+- For `energimerke`: only `klimasted` is accepted. EPW files are rejected with 400. Energy labeling requires a standard Norwegian climate location for the climate correction factor
 - Use `GET /klimasteder` to list valid municipality names
+
+**Model version:**
+- `modellversjon` selects which version of the calculation model the run uses. When the field is omitted or empty, the newest version is used. An unknown value is rejected with 400, and the error message lists the valid values
+- The version actually used is returned as `modelVersion` in the 202 response and in `GET /job/:jobId`, so it is always visible even when the parameter is omitted
+- Use `GET /modellversjoner` to list valid versions with their release dates and change descriptions
+
+> **Important:** selecting an older `modellversjon` enables the calculation behaviour that belonged to that version, but the request is still parsed by the *current* SXI importer, and the rest of the engine is the current build. A run with an older `modellversjon` is therefore **not** a bit-exact reproduction of what an earlier release of Bemify would have produced for the same file. Use it to keep results consistent with an existing model revision, not as an audit trail of historical runs.
 
 **Per-key limits:**
 - `POST /simulate`: max 6 requests per minute per API key
@@ -61,6 +69,7 @@ Start a new simulation. Returns a job ID for polling.
 {
   "jobId": "job_1712832645123_1",
   "position": 1,
+  "modelVersion": "2.2",
   "message": "Simulering lagt i kø (posisjon 1). Poll /job/job_1712832645123_1 for status."
 }
 ```
@@ -121,6 +130,7 @@ Check job status and retrieve results. Requires authentication.
 {
   "jobId": "job_1712832645123_1",
   "status": "queued",
+  "modelVersion": "2.2",
   "queuedAt": "2026-04-11T10:30:45.123Z",
   "queueLength": 3
 }
@@ -133,6 +143,7 @@ Check job status and retrieve results. Requires authentication.
 {
   "jobId": "job_1712832645123_1",
   "status": "completed",
+  "modelVersion": "2.2",
   "queuedAt": "2026-04-11T10:30:45.123Z",
   "startedAt": "2026-04-11T10:30:50.456Z",
   "completedAt": "2026-04-11T10:32:15.789Z",
@@ -154,12 +165,12 @@ Check job status and retrieve results. Requires authentication.
 }
 ```
 
-
 **Response when error (200):**
 ```json
 {
   "jobId": "job_1712832645123_1",
   "status": "error",
+  "modelVersion": "2.2",
   "completedAt": "2026-04-11T10:32:15.789Z",
   "error": "Error message"
 }
@@ -177,6 +188,26 @@ List all available climate locations. No authentication required.
 {
   "locations": ["TEK17 Referanseklima", "Oslo", "Bergen", "Trondheim", ...],
   "count": 51
+}
+```
+
+### GET /modellversjoner
+
+List all valid values for the `modellversjon` parameter. No authentication required.
+
+`versions` is sorted ascending, and `defaultVersion` is the version used when `modellversjon` is
+omitted from `POST /simulate`. `description` is the Norwegian, user-facing summary of what changed
+in that version; it is reproduced verbatim from the calculation engine.
+
+**Response (200):**
+```jsonc
+{
+  "defaultVersion": "2.2",
+  "versions": [
+    { "version": "1.0", "date": "2026-04-13", "description": "" },
+    { "version": "1.1", "date": "2026-05-25", "description": "Forbedret beregning av varme- og luftstrøm gjennom skillekonstruksjoner" }
+    // ... en per modellversjon
+  ]
 }
 ```
 
@@ -209,6 +240,9 @@ Queue status. No authentication required.
 | `aarssimulering` | Full year simulation (default) | klimasted or EPW | `energimerke` |
 | `energimerke` | Energy labeling | klimasted only | `energimerke` |
 | `tek17` | TEK17 compliance check | Automatic (reference, no input allowed) | `energimerke`, `tek17` |
+
+Simulation type and model version are independent: any `simuleringstype` can be combined with any
+`modellversjon`.
 
 ## Result Format
 
@@ -295,8 +329,11 @@ Only present when `simuleringstype=tek17`.
 }
 ```
 
-
 Possible `status` values: `"oppfylt"`, `"ikke_oppfylt"`, `"ikke_relevant"`.
+
+The `bygningsdel` labels in `minstekrav.rader` depend on the model version. From `2.2` onwards they
+also cover partitions against unheated zones, so the same row reads
+`"U-verdi yttervegger, inkl. vegg mot uoppvarmet sone"` instead of `"U-verdi yttervegger"`.
 
 ### Calculation Points (`result.beregningspunkter`)
 
@@ -354,6 +391,7 @@ Full field list per point:
       "ikkeKlimaavhengig": {}
     },
     "oppvarmingOutput_kWh": {},
+    "oppvarmingOutputPerPost_kWh": {},
     "kjoelingOutput_kWh": {},
     "apentIldstedBio_kWh": 0,
     "monthlyLevertPerKilde": {},
@@ -365,7 +403,6 @@ Full field list per point:
   }
 }
 ```
-
 
 ### Additional result fields
 
@@ -394,7 +431,7 @@ only need the four above):
 
 | Code | Meaning | Example |
 |------|---------|---------|
-| 400 | Bad request | Missing model file, invalid simuleringstype, both klimasted and climate provided, invalid file type |
+| 400 | Bad request | Missing model file, invalid simuleringstype, invalid modellversjon, a parameter given more than once, both klimasted and climate provided, invalid file type |
 | 401 | Unauthorized | Missing Authorization header |
 | 403 | Forbidden | Invalid or deactivated API key |
 | 404 | Not found | Job not found or expired |
@@ -435,6 +472,16 @@ curl -X POST https://api.bemify.no/simulate \
   -F "model=@building.sxi" \
   -F "climate=@oslo.epw"
 
+# Simulation pinned to a specific calculation model version
+curl -X POST https://api.bemify.no/simulate \
+  -H "Authorization: Bearer bmf_YOUR_TOKEN" \
+  -F "model=@building.sxi" \
+  -F "klimasted=Oslo" \
+  -F "modellversjon=2.1"
+
+# List valid model versions
+curl https://api.bemify.no/modellversjoner
+
 # Validate an SXI file without running a simulation
 curl -X POST https://api.bemify.no/validate \
   -H "Authorization: Bearer bmf_YOUR_TOKEN" \
@@ -461,11 +508,17 @@ with open("building.sxi", "rb") as model:
         f"{API_URL}/simulate",
         headers=headers,
         files={"model": model},
-        data={"klimasted": "Oslo", "simuleringstype": "energimerke"},
+        data={
+            "klimasted": "Oslo",
+            "simuleringstype": "energimerke",
+            # Optional: omit to use the newest model version
+            "modellversjon": "2.1",
+        },
     )
 
-job_id = resp.json()["jobId"]
-print(f"Job started: {job_id}")
+job = resp.json()
+job_id = job["jobId"]
+print(f"Job started: {job_id} (model version {job['modelVersion']})")
 
 # Poll for results
 while True:
