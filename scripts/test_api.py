@@ -9,6 +9,7 @@ Usage:
     python test_api.py --token bmf_... --sxi building.sxi --klimasted Oslo
     python test_api.py --token bmf_... --sxi building.sxi --simuleringstype tek17
     python test_api.py --token bmf_... --sxi building.sxi --epw oslo.epw
+    python test_api.py --token bmf_... --sxi building.sxi --modellversjon 2.1
 
 Requirements:
     pip install requests
@@ -101,7 +102,7 @@ def test_klimasteder(base_url):
         return []
 
 
-def start_simulation(base_url, token, sxi_path, klimasted=None, epw_path=None, simuleringstype="aarssimulering"):
+def start_simulation(base_url, token, sxi_path, klimasted=None, epw_path=None, simuleringstype="aarssimulering", modellversjon=None):
     header("3. POST /simulate")
 
     headers = {"Authorization": f"Bearer {token}"}
@@ -127,12 +128,16 @@ def start_simulation(base_url, token, sxi_path, klimasted=None, epw_path=None, s
     if simuleringstype != "aarssimulering":
         data["simuleringstype"] = simuleringstype
 
+    if modellversjon:
+        data["modellversjon"] = modellversjon
+
     info(f"Model: {sxi_path}")
     if klimasted:
         info(f"Klimasted: {klimasted}")
     if epw_path:
         info(f"EPW: {epw_path}")
     info(f"Simuleringstype: {simuleringstype}")
+    info(f"Modellversjon: {modellversjon if modellversjon else 'server default (newest)'}")
 
     try:
         resp = requests.post(f"{base_url}/simulate", headers=headers, files=files, data=data, timeout=30)
@@ -140,6 +145,8 @@ def start_simulation(base_url, token, sxi_path, klimasted=None, epw_path=None, s
         if resp.status_code == 202:
             job = resp.json()
             ok(f"Job created: {job['jobId']} (position {job['position']})")
+            if job.get("modelVersion"):
+                info(f"Model version used by server: {job['modelVersion']}")
             return job["jobId"]
         else:
             error = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else resp.text
@@ -223,7 +230,7 @@ def print_results(result):
                 if isinstance(val, (int, float)) and val > 0:
                     info(f"    {key}: {val:.0f} kWh")
 
-    # Energimerke
+    # Energimerke (only returned for simuleringstype=energimerke)
     em = result.get("energimerke")
     if em:
         print()
@@ -239,8 +246,13 @@ def print_results(result):
             info("  Breakdown:")
             for item in items:
                 info(f"    {item['kilde']}: {item['spesifikk_kWhm2']:.1f} kWh/m2 (x{item['vektingsfaktor']})")
+    else:
+        print()
+        info("  No energimerke in this result. It is only returned for")
+        info("  --simuleringstype energimerke, and requires a valid kommune")
+        info("  and bygningskategori in the model.")
 
-    # TEK17
+    # TEK17 (only returned for simuleringstype=tek17)
     tek = result.get("tek17")
     if tek:
         print()
@@ -290,6 +302,9 @@ def print_results(result):
         opps = tek.get("oppsummering", {})
         if opps:
             info(f"  Summary: {opps.get('antallOppfylt', 0)} passed, {opps.get('antallIkkeOppfylt', 0)} failed, {opps.get('antallIkkeRelevant', 0)} N/A")
+    else:
+        print()
+        info("  No tek17 block in this result. Re-run with --simuleringstype tek17.")
 
 
 # endregion
@@ -306,6 +321,7 @@ Examples:
   python test_api.py --token bmf_... --sxi building.sxi --klimasted Oslo
   python test_api.py --token bmf_... --sxi building.sxi --simuleringstype tek17
   python test_api.py --token bmf_... --sxi building.sxi --epw oslo.epw
+  python test_api.py --token bmf_... --sxi building.sxi --klimasted Oslo --modellversjon 2.1
         """,
     )
     parser.add_argument("--url", default="https://api.bemify.no", help="API base URL (default: https://api.bemify.no)")
@@ -314,6 +330,7 @@ Examples:
     parser.add_argument("--klimasted", default=None, help="Climate location (e.g. Oslo, Bergen)")
     parser.add_argument("--epw", default=None, help="Path to .epw climate file")
     parser.add_argument("--simuleringstype", default="aarssimulering", choices=["aarssimulering", "energimerke", "tek17"], help="Simulation type (default: aarssimulering)")
+    parser.add_argument("--modellversjon", default=None, help="Calculation model version, e.g. 2.1 (default: newest, decided by the server). See GET /modellversjoner")
     parser.add_argument("--timeout", type=int, default=300, help="Max polling time in seconds (default: 300)")
 
     args = parser.parse_args()
@@ -348,6 +365,7 @@ Examples:
         klimasted=args.klimasted,
         epw_path=args.epw,
         simuleringstype=args.simuleringstype,
+        modellversjon=args.modellversjon,
     )
     if not job_id:
         sys.exit(1)
