@@ -2,6 +2,8 @@
 Bemify Simulation API - Test Script Base
 
 Prints results including energimerke and TEK17 validation.
+Note: energimerke is only returned for SIMULERINGSTYPE = "energimerke",
+and tek17 only for SIMULERINGSTYPE = "tek17".
 
 Usage:
     python test_api_base.py
@@ -48,15 +50,20 @@ while True:
 if status["status"] == "completed":
     result = status["result"]
 
-    # Energimerke
+    # Energimerke (kun for simuleringstype=energimerke)
     if "energimerke" in result:
         em = result["energimerke"]
         print(f"Energimerke: {em['energimerke']}")
         print(f"Vektet spesifikk: {em['klimakorrigertVektetSpesifikk']:.1f} kWh/(m²·år)")
+    else:
+        print("Ingen energimerke: krever SIMULERINGSTYPE = 'energimerke', samt")
+        print("gyldig kommune og bygningskategori i modellen.")
 
     # TEK17 (kun for simuleringstype=tek17)
     if "tek17" in result:
         tek = result["tek17"]
         print(f"TEK17-samsvar: {tek['erSamsvarsende']}")
+    else:
+        print("Ingen TEK17-blokk: krever SIMULERINGSTYPE = 'tek17'.")
 else:
     print(f"Feil: {status['error']}")
