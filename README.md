@@ -159,8 +159,8 @@ Check job status and retrieve results. Requires authentication.
       { "id": "sone-1", "navn": "Sone 1", "area": 150.0 }
       // ... en per sone
     ],
-    "energimerke": { /* se egen seksjon */ },
-    "tek17": { /* se egen seksjon */ }
+    "energimerke": { /* kun ved simuleringstype=energimerke, se egen seksjon */ },
+    "tek17": { /* kun ved simuleringstype=tek17, se egen seksjon */ }
   }
 }
 ```
@@ -237,9 +237,9 @@ Queue status. No authentication required.
 
 | Value | Description | Climate | Extra result fields |
 |-------|-------------|---------|---------------------|
-| `aarssimulering` | Full year simulation (default) | klimasted or EPW | `energimerke` |
+| `aarssimulering` | Full year simulation (default) | klimasted or EPW | - |
 | `energimerke` | Energy labeling | klimasted only | `energimerke` |
-| `tek17` | TEK17 compliance check | Automatic (reference, no input allowed) | `energimerke`, `tek17` |
+| `tek17` | TEK17 compliance check | Automatic (reference, no input allowed) | `tek17` |
 
 Simulation type and model version are independent: any `simuleringstype` can be combined with any
 `modellversjon`.
@@ -248,7 +248,10 @@ Simulation type and model version are independent: any `simuleringstype` can be 
 
 ### Energy Label (`result.energimerke`)
 
-Computed automatically when the project has a valid municipality and building category.
+Only present when `simuleringstype=energimerke` and the project has a valid municipality and
+building category. `aarssimulering` runs with the project's actual input values, and `tek17` runs
+with NS 3031:2014 assumptions and reference climate — neither provides the NS 3031:2025 basis an
+energy label requires.
 
 ```json
 {
@@ -531,7 +534,7 @@ while True:
 if status["status"] == "completed":
     result = status["result"]
 
-    # Energy label
+    # Energy label (only for simuleringstype=energimerke)
     if "energimerke" in result:
         em = result["energimerke"]
         print(f"Energy label: {em['energimerke']}")
